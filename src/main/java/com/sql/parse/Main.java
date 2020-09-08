@@ -22,8 +22,22 @@ import java.util.Map;
  */
 public class Main {
 
-    public static SQLComposition sql = new SQLComposition();
-    public static void main(String[] args) {
+
+
+    public static SQLComposition parse() {
+
+        SQLComposition sql = new SQLComposition();    //SQL语句类
+
+        Map<String, String> selectMapAS = new HashMap<>(); //存储select选项别名
+
+        String fromSource = null;
+
+        List<String> joinList = new ArrayList<>();
+
+        Map<String, String> fromMapAS = new HashMap<>();
+
+
+
         SqlParser.Config config = SqlParser.configBuilder()
                 .setLex(Lex.MYSQL)
                 //.setConformance(SqlConformanceEnum.MYSQL_5)
@@ -31,8 +45,8 @@ public class Main {
 
         //SqlParser sqlParser = SqlParser.create("select avg(logout_time - login_time)  from log_model where eduction='本科' and level=1 group by dept_id",config);
         //SqlParser sqlParser = SqlParser.create("select * from log_model where eduction='本科' and level=1 group by dept_id",config);
-        SqlParser sqlParser = SqlParser.create("select bb from log_model order by aa ",config);
-        //SqlParser sqlParser = SqlParser.create("SELECT distinct e.first_name AS FirstName, s.salary AS Salary,test AS t from employee AS e join salary AS s on e.emp_id=s.emp_id where e.organization = 'Tesla' and s.organization = 'Tesla'",config);
+        //SqlParser sqlParser = SqlParser.create("select bb from log_model order by aa ",config);
+        SqlParser sqlParser = SqlParser.create("SELECT distinct e.first_name AS FirstName, s.salary AS Salary,test AS t from employee AS e join salary AS s on e.emp_id=s.emp_id where e.organization = 'Tesla' and s.organization = 'Tesla'",config);
 
         SqlNode sqlNode = null;
 
@@ -44,28 +58,28 @@ public class Main {
         //select [select选项] 字段列表 [字段别名] /* from 数据源 [where条件子句] [group by子句] [having子句] [order by子句] [limit子句]
 
 
-        if (SqlKind.ORDER_BY.equals(sqlNode.getKind())) {   //存在OrderBy  要先处理
+        if (SqlKind.ORDER_BY.equals(sqlNode.getKind())) {        //存在OrderBy  要先处理
             SqlOrderBy sqlOrderBy = (SqlOrderBy) sqlNode;
             sql.setOrderByColName(sqlOrderBy.orderList);
-            sqlNode = ((SqlOrderBy) sqlNode).query;     //sqlNode赋为SqlSelect
+            sqlNode = ((SqlOrderBy) sqlNode).query;              //sqlNode赋为SqlSelect
         }
 
         if (SqlKind.SELECT.equals(sqlNode.getKind())) {
             SqlSelect sqlSelect = (SqlSelect) sqlNode;
+            sql.setDistinct(sqlSelect.isDistinct());              //是否distinct
             SqlNode from = sqlSelect.getFrom();
-            SqlNode where = sqlSelect.getWhere();                     //where条件
+            SqlNode where = sqlSelect.getWhere();                 //where条件
             SqlNodeList selectList = sqlSelect.getSelectList();
             //获取group by 字段
-            SqlNode having = sqlSelect.getHaving();                   //having条件
-            SqlNodeList orderList = sqlSelect.getOrderList();         //oderby字段
+            SqlNode having = sqlSelect.getHaving();               //having条件
+            SqlNodeList orderList = sqlSelect.getOrderList();     //oderby字段
 
             /**
              * 获取from数据源   即表名
              */
 
             if (SqlKind.IDENTIFIER.equals(from.getKind())) {
-
-
+                extractFromClauses(from,fromSource, joinList, fromMapAS);
             }
 
             /**
@@ -76,7 +90,7 @@ public class Main {
             for (SqlNode s : selectList.getList()) {
                 //AS
                 if (SqlKind.AS.equals(s.getKind())) {
-                    System.out.println(((SqlBasicCall)s).operand(0)+" "+((SqlBasicCall)s).operand(1));
+                    selectMapAS.put(((SqlBasicCall) s).operand(0).toString(), ((SqlBasicCall) s).operand(1).toString());
                 }
 
                 if (SqlKind.IDENTIFIER.equals(s.getKind())) {
@@ -88,10 +102,10 @@ public class Main {
                     for (String ss : res) {
                         System.out.println(ss);
                     }
-
                 }
             }
-
+            sql.setSelectList(selectList);
+            sql.setSelectMapAS(selectMapAS);
             /**
              * 关于where
              * 1. 条件  AND  OR  ()  NOT
@@ -103,12 +117,11 @@ public class Main {
 
             List<String> fieldList_where = new ArrayList<>();
             processWhere(where,fieldList_where);
-            printTree(fieldList_where);
+            sql.setWhereExpression(fieldList_where);
             //having   同where
             List<String> fieldList_having = new ArrayList<>();
             processWhere(having,fieldList_having);
-            printTree(fieldList_having);
-
+            sql.setHavingExpression(fieldList_having);
 
             /**
              * order by列表
@@ -122,82 +135,60 @@ public class Main {
 
                 }
             }
-
-
-
-
          }
-
-
-
+        return sql;
     }
 
-    private static List<String> extractFromClauses(SqlNode node) {
-        final List<String> tables = new ArrayList<>();
-        final Map<String, String> map = new HashMap<>();
-        // 只有一个数据集
-        if (node.getKind().equals(SqlKind.AS)) {
-            tables.add(((SqlBasicCall) node).operand(1).toString()+"  "+(((SqlBasicCall) node).operand(0).toString()));
-
-            return tables;
+    private static void extractFromClauses(SqlNode node, String whereSource, List<String> joinList, Map<String, String> fromMapAS) {
+        // If order by comes in the query.
+        if (node.getKind().equals(SqlKind.ORDER_BY)) {
+            // Retrieve exact select.
+            node = ((SqlSelect) ((SqlOrderBy) node).query).getFrom();
+        } else {
+            node = ((SqlSelect) node).getFrom();
         }
 
-        // 超过一个数据集.
+        if (node == null) {
+            return;
+        }
+
+        // Case when only 1 data set in the query.
+        if (node.getKind().equals(SqlKind.AS)) {
+            whereSource = ((SqlBasicCall) node).operand(0).toString();
+            fromMapAS.put(((SqlBasicCall) node).operand(0).toString(),((SqlBasicCall) node).operand(1).toString());
+            return;
+        }
+
+        // Case when there are more than 1 data sets in the query.
         if (node.getKind().equals(SqlKind.JOIN)) {
             final SqlJoin from = (SqlJoin) node;
 
-            // 只有两个数据集
+            // Case when only 2 data sets are in the query.
             if (from.getLeft().getKind().equals(SqlKind.AS)) {
-                tables.add(((SqlBasicCall) from.getLeft()).operand(1).toString()+"  "+((SqlBasicCall) from.getLeft()).operand(0).toString());
+                joinList.add(((SqlBasicCall) from.getLeft()).operand(0).toString());
+                fromMapAS.put(((SqlBasicCall) from.getLeft()).operand(0).toString(), ((SqlBasicCall) from.getLeft()).operand(1).toString());
+            } else if (from.getLeft().getKind().equals(SqlKind.IDENTIFIER)) {
+                joinList.add(from.getLeft().toString());
             } else {
-                // 超过两个数据集
+                // Case when more than 2 data sets are in the query.
                 SqlJoin left = (SqlJoin) from.getLeft();
+
+                // 树的遍历
                 while (!left.getLeft().getKind().equals(SqlKind.AS)) {
-                    tables.add(((SqlBasicCall) left.getRight()).operand(1).toString()+"  "+((SqlBasicCall) left.getRight()).operand(0).toString());
+                    joinList.add(((SqlBasicCall) left.getRight()).operand(0).toString());
+                    fromMapAS.put(((SqlBasicCall) left.getRight()).operand(0).toString(), ((SqlBasicCall) left.getRight()).operand(1).toString());
                     left = (SqlJoin) left.getLeft();
                 }
-                tables.add(((SqlBasicCall) left.getLeft()).operand(1).toString()+"  "+((SqlBasicCall) left.getLeft()).operand(0).toString());
-                tables.add(((SqlBasicCall) left.getRight()).operand(1).toString()+"  "+((SqlBasicCall) left.getRight()).operand(0).toString());
+                joinList.add(((SqlBasicCall) left.getLeft()).operand(0).toString());
+                joinList.add(((SqlBasicCall) left.getRight()).operand(0).toString());
+                fromMapAS.put(((SqlBasicCall) left.getLeft()).operand(0).toString(), ((SqlBasicCall) left.getLeft()).operand(1).toString());
+                fromMapAS.put(((SqlBasicCall) left.getRight()).operand(0).toString(), ((SqlBasicCall) left.getRight()).operand(1).toString());
             }
-
-            tables.add(((SqlBasicCall) from.getRight()).operand(1).toString()+"  "+((SqlBasicCall) from.getRight()).operand(0).toString());
-            return tables;
+            if (from.getRight().getKind().equals(SqlKind.IDENTIFIER)) {
+                joinList.add(from.getRight().toString());
+            } else
+                fromMapAS.put(((SqlBasicCall) from.getRight()).operand(0).toString(), ((SqlBasicCall) from.getRight()).operand(1).toString());;
         }
-
-        return tables;
-    }
-
-    private static Map<String, String> extractWhereClauses(SqlNode where) {
-        final Map<String, String> tableToPlaceHolder = new HashMap<>();
-        final SqlBasicCall newwhere = (SqlBasicCall) where;
-        if (where != null) {
-            // Case when there is only 1 where clause
-            if (newwhere.operand(0).getKind().equals(SqlKind.IDENTIFIER)
-                    && newwhere.operand(1).getKind().equals(SqlKind.LITERAL)) {
-                tableToPlaceHolder.put(newwhere.operand(0).toString(),
-                        newwhere.operand(1).toString());
-                return tableToPlaceHolder;
-            }
-
-            final SqlBasicCall sqlBasicCallRight = newwhere.operand(1);
-            SqlBasicCall sqlBasicCallLeft = newwhere.operand(0);
-
-            // Iterate over left until we get a pair of identifier and literal.
-            while (!sqlBasicCallLeft.operand(0).getKind().equals(SqlKind.IDENTIFIER)
-                    && !sqlBasicCallLeft.operand(1).getKind().equals(SqlKind.LITERAL)) {
-                tableToPlaceHolder.put(((SqlBasicCall) sqlBasicCallLeft.operand(1)).operand(0).toString(),
-                        ((SqlBasicCall) sqlBasicCallLeft.operand(1)).operand(1).toString());
-                sqlBasicCallLeft = sqlBasicCallLeft.operand(0); // Move to next where condition.
-            }
-
-            tableToPlaceHolder.put(sqlBasicCallLeft.operand(0).toString(),
-                    sqlBasicCallLeft.operand(1).toString());
-            tableToPlaceHolder.put(sqlBasicCallRight.operand(0).toString(),
-                    sqlBasicCallRight.operand(1).toString());
-            return tableToPlaceHolder;
-        }
-
-        return tableToPlaceHolder;
     }
 
 

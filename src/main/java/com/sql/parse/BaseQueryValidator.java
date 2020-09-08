@@ -3,17 +3,13 @@ package com.sql.parse;
 import org.apache.calcite.sql.*;
 import org.apache.calcite.sql.parser.SqlParseException;
 import org.apache.calcite.sql.parser.SqlParser;
-
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 public class BaseQueryValidator {
 
-    private static List<String> extractTableAliases(SqlNode node) {
-        final List<String> tables = new ArrayList<>();
-
+    private static void extractTableAliases(SqlNode node, String whereSource, List<String> joinList, Map<String, String> fromMapAS) {
         // If order by comes in the query.
         if (node.getKind().equals(SqlKind.ORDER_BY)) {
             // Retrieve exact select.
@@ -23,13 +19,14 @@ public class BaseQueryValidator {
         }
 
         if (node == null) {
-            return tables;
+            return;
         }
 
         // Case when only 1 data set in the query.
         if (node.getKind().equals(SqlKind.AS)) {
-            tables.add(((SqlBasicCall) node).operand(1).toString()+"  "+(((SqlBasicCall) node).operand(0).toString()));
-            return tables;
+            whereSource = ((SqlBasicCall) node).operand(0).toString();
+            fromMapAS.put(((SqlBasicCall) node).operand(0).toString(),((SqlBasicCall) node).operand(1).toString());
+            return;
         }
 
         // Case when there are more than 1 data sets in the query.
@@ -38,29 +35,30 @@ public class BaseQueryValidator {
 
             // Case when only 2 data sets are in the query.
             if (from.getLeft().getKind().equals(SqlKind.AS)) {
-                tables.add(((SqlBasicCall) from.getLeft()).operand(1).toString()+"  "+((SqlBasicCall) from.getLeft()).operand(0).toString());
+                joinList.add(((SqlBasicCall) from.getLeft()).operand(0).toString());
+                fromMapAS.put(((SqlBasicCall) from.getLeft()).operand(0).toString(), ((SqlBasicCall) from.getLeft()).operand(1).toString());
             } else if (from.getLeft().getKind().equals(SqlKind.IDENTIFIER)) {
-                tables.add(from.getLeft().toString());
+                joinList.add(from.getLeft().toString());
             } else {
                 // Case when more than 2 data sets are in the query.
                 SqlJoin left = (SqlJoin) from.getLeft();
 
                 // 树的遍历
                 while (!left.getLeft().getKind().equals(SqlKind.AS)) {
-                    tables.add(((SqlBasicCall) left.getRight()).operand(1).toString() + "  " + ((SqlBasicCall) left.getRight()).operand(0).toString());
+                    joinList.add(((SqlBasicCall) left.getRight()).operand(0).toString());
+                    fromMapAS.put(((SqlBasicCall) left.getRight()).operand(0).toString(), ((SqlBasicCall) left.getRight()).operand(1).toString());
                     left = (SqlJoin) left.getLeft();
                 }
-                tables.add(((SqlBasicCall) left.getLeft()).operand(1).toString() + "  " + ((SqlBasicCall) left.getLeft()).operand(0).toString());
-                tables.add(((SqlBasicCall) left.getRight()).operand(1).toString() + "  " + ((SqlBasicCall) left.getRight()).operand(0).toString());
+                joinList.add(((SqlBasicCall) left.getLeft()).operand(0).toString());
+                joinList.add(((SqlBasicCall) left.getRight()).operand(0).toString());
+                fromMapAS.put(((SqlBasicCall) left.getLeft()).operand(0).toString(), ((SqlBasicCall) left.getLeft()).operand(1).toString());
+                fromMapAS.put(((SqlBasicCall) left.getRight()).operand(0).toString(), ((SqlBasicCall) left.getRight()).operand(1).toString());
             }
             if (from.getRight().getKind().equals(SqlKind.IDENTIFIER)) {
-                tables.add(from.getRight().toString());
-            }else
-                tables.add(((SqlBasicCall) from.getRight()).operand(1).toString()+"  "+((SqlBasicCall) from.getRight()).operand(0).toString());
-            return tables;
+                joinList.add(from.getRight().toString());
+            } else
+                fromMapAS.put(((SqlBasicCall) from.getRight()).operand(0).toString(), ((SqlBasicCall) from.getRight()).operand(1).toString());;
         }
-
-        return tables;
     }
 
     private static Map<String, String> extractWhereClauses(SqlNode node) {
@@ -82,8 +80,8 @@ public class BaseQueryValidator {
             // Case when there is only 1 where clause
             if (where.operand(0).getKind().equals(SqlKind.IDENTIFIER)
                     && where.operand(1).getKind().equals(SqlKind.LITERAL)) {
-                tableToPlaceHolder.put(where.operand(0).toString(), 
-                        where.operand(1).toString()); 
+                tableToPlaceHolder.put(where.operand(0).toString(),
+                        where.operand(1).toString());
                 return tableToPlaceHolder;
             }
 
@@ -117,8 +115,8 @@ public class BaseQueryValidator {
        // final SqlJoin from = (SqlJoin) sqlSelect.getFrom();
 
         // Extract table names/data sets, For above SQL query : [e, s]
-        final List<String> tables = extractTableAliases(sqlNode);
-        printList(tables);
+       // final List<String> tables = extractTableAliases(sqlNode);
+       // printList(tables);
         // Extract where clauses, For above SQL query : [e.organization -> 'Tesla', s.organization -> 'Tesla']
         final Map<String, String> whereClauses = extractWhereClauses(sqlSelect);
         printMap(whereClauses);
