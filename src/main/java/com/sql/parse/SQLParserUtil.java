@@ -20,21 +20,17 @@ import java.util.Map;
  * [ORDER BY <排序依据列> [ASC | DESC]] [...n]
  * [LIMIT N,M]
  */
-public class SQLParser {
+public class SQLParserUtil {
 
 
+    public static SQLComposition parse(String sql) {
 
-    public static SQLComposition parse() {
+        SQLComposition sqlComposition = new SQLComposition();    //SQL语句类
 
-        SQLComposition sql = new SQLComposition();    //SQL语句类
+        List<String> select = new ArrayList<>();
 
         Map<String, String> selectMapAS = new HashMap<>(); //存储select选项别名
 
-        String fromSource = null;
-
-        List<String> joinList = new ArrayList<>();
-
-        Map<String, String> fromMapAS = new HashMap<>();
 
 
 
@@ -46,7 +42,7 @@ public class SQLParser {
         //SqlParser sqlParser = SqlParser.create("select avg(logout_time - login_time)  from log_model where eduction='本科' and level=1 group by dept_id",config);
         //SqlParser sqlParser = SqlParser.create("select * from log_model where eduction='本科' and level=1 group by dept_id",config);
         //SqlParser sqlParser = SqlParser.create("select bb from log_model order by aa ",config);
-        SqlParser sqlParser = SqlParser.create("SELECT distinct e.first_name AS FirstName, s.salary AS Salary,test AS t from employee AS e join salary AS s on e.emp_id=s.emp_id where e.organization = 'Tesla' and s.organization = 'Tesla'",config);
+        SqlParser sqlParser = SqlParser.create(sql, config);
 
         SqlNode sqlNode = null;
 
@@ -60,13 +56,13 @@ public class SQLParser {
 
         if (SqlKind.ORDER_BY.equals(sqlNode.getKind())) {        //存在OrderBy  要先处理
             SqlOrderBy sqlOrderBy = (SqlOrderBy) sqlNode;
-            sql.setOrderByColName(sqlOrderBy.orderList);
+            sqlComposition.setOrderByColName(sqlOrderBy.orderList);
             sqlNode = ((SqlOrderBy) sqlNode).query;              //sqlNode赋为SqlSelect
         }
 
         if (SqlKind.SELECT.equals(sqlNode.getKind())) {
             SqlSelect sqlSelect = (SqlSelect) sqlNode;
-            sql.setDistinct(sqlSelect.isDistinct());              //是否distinct
+            sqlComposition.setDistinct(sqlSelect.isDistinct());              //是否distinct
             SqlNode from = sqlSelect.getFrom();
             SqlNode where = sqlSelect.getWhere();                 //where条件
             SqlNodeList selectList = sqlSelect.getSelectList();
@@ -77,10 +73,7 @@ public class SQLParser {
             /**
              * 获取from数据源   即表名
              */
-
-            if (SqlKind.IDENTIFIER.equals(from.getKind())) {
-                extractFromClauses(from,fromSource, joinList, fromMapAS);
-            }
+            extractFromClauses(from, sqlComposition);
 
             /**
              *  select选项   1.正常项   2.*   3.函数
@@ -90,22 +83,23 @@ public class SQLParser {
             for (SqlNode s : selectList.getList()) {
                 //AS
                 if (SqlKind.AS.equals(s.getKind())) {
+                    select.add(((SqlBasicCall) s).operand(0).toString());
                     selectMapAS.put(((SqlBasicCall) s).operand(0).toString(), ((SqlBasicCall) s).operand(1).toString());
                 }
 
                 if (SqlKind.IDENTIFIER.equals(s.getKind())) {
-                    System.out.println(s.toString());
+                    select.add(s.toString());
                 }
                 if (SqlKind.OTHER_FUNCTION.equals(s.getKind())) {
-                    System.out.println(s.toString());
+                    select.add(s.toString());
                     List<String> res = getParaOfFun(s.toString());
                     for (String ss : res) {
                         System.out.println(ss);
                     }
                 }
             }
-            sql.setSelectList(selectList);
-            sql.setSelectMapAS(selectMapAS);
+            sqlComposition.setSelect(select);
+            sqlComposition.setSelectMapAS(selectMapAS);
             /**
              * 关于where
              * 1. 条件  AND  OR  ()  NOT
@@ -116,17 +110,17 @@ public class SQLParser {
              */
 
             List<String> fieldList_where = new ArrayList<>();
-            processWhere(where,fieldList_where);
-            sql.setWhereExpression(fieldList_where);
+            processWhere(where, fieldList_where);
+            sqlComposition.setWhereExpression(fieldList_where);
             //having   同where
             List<String> fieldList_having = new ArrayList<>();
-            processWhere(having,fieldList_having);
-            sql.setHavingExpression(fieldList_having);
+            processWhere(having, fieldList_having);
+            sqlComposition.setHavingExpression(fieldList_having);
 
             /**
              * order by列表
              */
-            if(orderList!=null){
+            if (orderList != null) {
                 for (SqlNode s : orderList.getList()) {
                     System.out.println(s);
                     if (SqlKind.IDENTIFIER.equals(s.getKind())) {
@@ -135,28 +129,18 @@ public class SQLParser {
 
                 }
             }
-         }
-        return sql;
+        }
+        return sqlComposition;
     }
 
-    private static void extractFromClauses(SqlNode node, String whereSource, List<String> joinList, Map<String, String> fromMapAS) {
-        // If order by comes in the query.
-        if (node.getKind().equals(SqlKind.ORDER_BY)) {
-            // Retrieve exact select.
-            node = ((SqlSelect) ((SqlOrderBy) node).query).getFrom();
-        } else {
-            node = ((SqlSelect) node).getFrom();
-        }
-
-        if (node == null) {
-            return;
-        }
-
+    private static SQLComposition extractFromClauses(SqlNode node, SQLComposition sqlComposition) {
+        String fromSource = null;
+        List<String> joinList = new ArrayList<>();
+        Map<String, String> fromMapAS = new HashMap<>();
         // Case when only 1 data set in the query.
         if (node.getKind().equals(SqlKind.AS)) {
-            whereSource = ((SqlBasicCall) node).operand(0).toString();
-            fromMapAS.put(((SqlBasicCall) node).operand(0).toString(),((SqlBasicCall) node).operand(1).toString());
-            return;
+            fromSource = ((SqlBasicCall) node).operand(0).toString();
+            fromMapAS.put(((SqlBasicCall) node).operand(0).toString(), ((SqlBasicCall) node).operand(1).toString());
         }
 
         // Case when there are more than 1 data sets in the query.
@@ -187,20 +171,25 @@ public class SQLParser {
             if (from.getRight().getKind().equals(SqlKind.IDENTIFIER)) {
                 joinList.add(from.getRight().toString());
             } else
-                fromMapAS.put(((SqlBasicCall) from.getRight()).operand(0).toString(), ((SqlBasicCall) from.getRight()).operand(1).toString());;
+                fromSource=((SqlBasicCall) from.getRight()).operand(0).toString();
+                fromMapAS.put(((SqlBasicCall) from.getRight()).operand(0).toString(), ((SqlBasicCall) from.getRight()).operand(1).toString());
+
         }
+        sqlComposition.setFromSource(fromSource);
+        sqlComposition.setJoinList(joinList);
+        sqlComposition.setFromMapAS(fromMapAS);
+        return sqlComposition;
     }
 
 
-    public static void processWhere(SqlNode node,List<String> res) {    //输出where子树的叶子结点   即标识符
-
-        if(node==null) return;
-        if(isOperator(node)) res.add(node.toString());
-        //if(node.getKind().equals(SqlKind.IDENTIFIER) || node.getKind().equals(SqlKind.LITERAL)) return;
+    public static void processWhere(SqlNode node, List<String> res) {    //输出where子树的叶子结点   即标识符
+        if (node == null) return;
+        if (isOperator(node)) res.add(node.toString());
+            //if(node.getKind().equals(SqlKind.IDENTIFIER) || node.getKind().equals(SqlKind.LITERAL)) return;
         else {
             SqlBasicCall sqlwhereBasicCall = (SqlBasicCall) node;
             for (SqlNode sqlNode1 : sqlwhereBasicCall.operands) {
-                processWhere(sqlNode1,res);
+                processWhere(sqlNode1, res);
             }
         }
     }
@@ -233,15 +222,15 @@ public class SQLParser {
         }
     }
 
-    public static List<String> getParaOfFun(String fun){  //取出函数的参数 后面会根据参数所属表设置语句的条件
+    public static List<String> getParaOfFun(String fun) {  //取出函数的参数 后面会根据参数所属表设置语句的条件
         List<String> res = new ArrayList<>();
-        int left=0, right=-1;
+        int left = 0, right = -1;
         for (int i = 0; i < fun.length(); i++) {
-            if(fun.charAt(i)=='(') left=i;
-            if(fun.charAt(i)==')') right = i;
+            if (fun.charAt(i) == '(') left = i;
+            if (fun.charAt(i) == ')') right = i;
         }
         String temp = fun.substring(left, right + 1);
-        String[] paras=temp.split(",");
+        String[] paras = temp.split(",");
         for (String str : paras) {
             res.add(getLetter(str));
         }
@@ -250,10 +239,10 @@ public class SQLParser {
 
     public static String getLetter(String a) {
         StringBuffer sb = new StringBuffer();
-        for(int i = 0;i<a.length();i++){
+        for (int i = 0; i < a.length(); i++) {
             char c = a.charAt(i);
 
-            if((c<='z'&&c>='a')||(c<='Z'&&c>='A')){
+            if ((c <= 'z' && c >= 'a') || (c <= 'Z' && c >= 'A')) {
                 sb.append(c);
             }
         }

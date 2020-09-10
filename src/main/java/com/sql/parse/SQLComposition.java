@@ -19,7 +19,7 @@ import java.util.Map;
  */
 @Data
 public class SQLComposition {
-    private SqlNodeList selectList;         //目标列表
+    private List<String> select;         //目标列表
     private Map<String,String> selectMapAS;  //若有AS
     private boolean isDistinct;              //Distinct
     private String fromSource;               //from
