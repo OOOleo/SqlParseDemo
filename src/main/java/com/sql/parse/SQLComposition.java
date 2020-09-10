@@ -21,12 +21,12 @@ import java.util.Map;
 public class SQLComposition {
     private SqlNodeList selectList;         //目标列表
     private Map<String,String> selectMapAS;  //若有AS
-    private boolean isDistinct;
-    private String fromSource;
-    private List<String> joinList;
+    private boolean isDistinct;              //Distinct
+    private String fromSource;               //from
+    private List<String> joinList;           //join表
     private Map<String,String> fromMapAS;    //表名别名
-    private List<String> whereExpression;     //where条件
-    private SqlNodeList groupByColName;            //group by 列
-    private List<String> havingExpression;     //having条件
-    private SqlNodeList orderByColName;             //order by 列
+    private List<String> whereExpression;    //where条件
+    private SqlNodeList groupByColName;      //group by 列
+    private List<String> havingExpression;   //having条件
+    private SqlNodeList orderByColName;      //order by 列
 }
