@@ -20,7 +20,7 @@ import java.util.Map;
  * [ORDER BY <排序依据列> [ASC | DESC]] [...n]
  * [LIMIT N,M]
  */
-public class Main {
+public class SQLParser {
 
 
 
