@@ -1,7 +1,6 @@
 package com.sql.parse;
 
 import org.apache.calcite.sql.SqlNode;
-import org.apache.calcite.sql.SqlNodeList;
 
 public class PrintSqlConposition {
     public static void print(SQLComposition sqlComposition) {
@@ -47,7 +46,7 @@ public class PrintSqlConposition {
         }
 
         if (sqlComposition.getGroupByColName() != null) {
-            System.out.println("group by:");
+            System.out.print("group by: ");
             for (SqlNode sqlNode : sqlComposition.getGroupByColName()) {
                 System.out.println(sqlNode.toString());
             }
@@ -62,7 +61,7 @@ public class PrintSqlConposition {
         }
 
         if (sqlComposition.getOrderByColName() != null) {
-            System.out.println("orderBy:");
+            System.out.print("orderBy: ");
             for (SqlNode sqlNode : sqlComposition.getOrderByColName()) {
                 System.out.println(sqlNode.toString());
             }

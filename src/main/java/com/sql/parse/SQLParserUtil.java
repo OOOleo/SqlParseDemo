@@ -67,8 +67,10 @@ public class SQLParserUtil {
             SqlNode where = sqlSelect.getWhere();                 //where条件
             SqlNodeList selectList = sqlSelect.getSelectList();
             //获取group by 字段
+            SqlNodeList groupByList = sqlSelect.getGroup();
+            sqlComposition.setGroupByColName(groupByList);
             SqlNode having = sqlSelect.getHaving();               //having条件
-            SqlNodeList orderList = sqlSelect.getOrderList();     //oderby字段
+                //oderby字段
 
             /**
              * 获取from数据源   即表名
@@ -92,10 +94,10 @@ public class SQLParserUtil {
                 }
                 if (SqlKind.OTHER_FUNCTION.equals(s.getKind())) {
                     select.add(s.toString());
-                    List<String> res = getParaOfFun(s.toString());
-                    for (String ss : res) {
-                        System.out.println(ss);
-                    }
+//                    List<String> res = getParaOfFun(s.toString());
+//                    for (String ss : res) {
+//                        System.out.println(ss);
+//                    }
                 }
             }
             sqlComposition.setSelect(select);
@@ -117,18 +119,6 @@ public class SQLParserUtil {
             processWhere(having, fieldList_having);
             sqlComposition.setHavingExpression(fieldList_having);
 
-            /**
-             * order by列表
-             */
-            if (orderList != null) {
-                for (SqlNode s : orderList.getList()) {
-                    System.out.println(s);
-                    if (SqlKind.IDENTIFIER.equals(s.getKind())) {
-                        System.out.println(s.toString());
-                    }
-
-                }
-            }
         }
         return sqlComposition;
     }
@@ -138,7 +128,10 @@ public class SQLParserUtil {
         List<String> joinList = new ArrayList<>();
         Map<String, String> fromMapAS = new HashMap<>();
         // Case when only 1 data set in the query.
-        if (node.getKind().equals(SqlKind.AS)) {
+        if (node.getKind().equals(SqlKind.IDENTIFIER)) {
+            fromSource = node.toString();
+        }
+        else {
             fromSource = ((SqlBasicCall) node).operand(0).toString();
             fromMapAS.put(((SqlBasicCall) node).operand(0).toString(), ((SqlBasicCall) node).operand(1).toString());
         }
