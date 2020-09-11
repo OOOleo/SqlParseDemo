@@ -4,7 +4,7 @@ import org.apache.calcite.sql.SqlNode;
 
 public class PrintSqlConposition {
     public static void print(SQLComposition sqlComposition) {
-        System.out.println("目标列表：");
+        System.out.print("目标列表：");
         for (String  name : sqlComposition.getSelect()) {
             System.out.print(name+"  ");
         }
@@ -39,6 +39,10 @@ public class PrintSqlConposition {
         }
 
         if (sqlComposition.getWhereExpression().size()!=0) {
+
+
+
+
             System.out.println("where条件:");
             for (String cond : sqlComposition.getWhereExpression()) {
                 System.out.println(cond);

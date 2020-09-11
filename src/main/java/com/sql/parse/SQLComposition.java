@@ -2,6 +2,7 @@ package com.sql.parse;
 
 
 import lombok.Data;
+import lombok.ToString;
 import org.apache.calcite.sql.SqlNodeList;
 
 import java.util.List;
@@ -18,6 +19,7 @@ import java.util.Map;
  * [LIMIT N,M]
  */
 @Data
+@ToString
 public class SQLComposition {
     private List<String> select;         //目标列表
     private Map<String,String> selectMapAS;  //若有AS

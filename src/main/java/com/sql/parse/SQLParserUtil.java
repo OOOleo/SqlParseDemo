@@ -54,15 +54,15 @@ public class SQLParserUtil {
         //select [select选项] 字段列表 [字段别名] /* from 数据源 [where条件子句] [group by子句] [having子句] [order by子句] [limit子句]
 
 
-        if (SqlKind.ORDER_BY.equals(sqlNode.getKind())) {        //存在OrderBy  要先处理
+        if (SqlKind.ORDER_BY.equals(sqlNode.getKind())) {         //存在OrderBy  要先处理
             SqlOrderBy sqlOrderBy = (SqlOrderBy) sqlNode;
             sqlComposition.setOrderByColName(sqlOrderBy.orderList);
-            sqlNode = ((SqlOrderBy) sqlNode).query;              //sqlNode赋为SqlSelect
+            sqlNode = ((SqlOrderBy) sqlNode).query;               //sqlNode赋为SqlSelect
         }
 
         if (SqlKind.SELECT.equals(sqlNode.getKind())) {
             SqlSelect sqlSelect = (SqlSelect) sqlNode;
-            sqlComposition.setDistinct(sqlSelect.isDistinct());              //是否distinct
+            sqlComposition.setDistinct(sqlSelect.isDistinct());   //是否distinct
             SqlNode from = sqlSelect.getFrom();
             SqlNode where = sqlSelect.getWhere();                 //where条件
             SqlNodeList selectList = sqlSelect.getSelectList();
@@ -70,7 +70,7 @@ public class SQLParserUtil {
             SqlNodeList groupByList = sqlSelect.getGroup();
             sqlComposition.setGroupByColName(groupByList);
             SqlNode having = sqlSelect.getHaving();               //having条件
-                //oderby字段
+
 
             /**
              * 获取from数据源   即表名
@@ -92,12 +92,8 @@ public class SQLParserUtil {
                 if (SqlKind.IDENTIFIER.equals(s.getKind())) {
                     select.add(s.toString());
                 }
-                if (SqlKind.OTHER_FUNCTION.equals(s.getKind())) {
+                if (isOperator(s)||s.getKind().belongsTo(SqlKind.FUNCTION)) {
                     select.add(s.toString());
-//                    List<String> res = getParaOfFun(s.toString());
-//                    for (String ss : res) {
-//                        System.out.println(ss);
-//                    }
                 }
             }
             sqlComposition.setSelect(select);
@@ -131,10 +127,10 @@ public class SQLParserUtil {
         if (node.getKind().equals(SqlKind.IDENTIFIER)) {
             fromSource = node.toString();
         }
-        else {
+        else if(node.getKind().equals(SqlKind.AS)){
             fromSource = ((SqlBasicCall) node).operand(0).toString();
             fromMapAS.put(((SqlBasicCall) node).operand(0).toString(), ((SqlBasicCall) node).operand(1).toString());
-        }
+        }else{}
 
         // Case when there are more than 1 data sets in the query.
         if (node.getKind().equals(SqlKind.JOIN)) {
@@ -195,24 +191,9 @@ public class SQLParserUtil {
     }
 
     public static boolean isOperator(SqlNode sqlNode) {  //函数 操作符  数据 停止查询
-        switch (sqlNode.getKind().toString()) {
-            case "EQUALS":
-            case "NOT_EQUALS":
-            case "GREATER_THAN":
-            case "GREATER_THAN_OR_EQUAL":
-            case "LESS_THAN":
-            case "LESS_THAN_OR_EQUAL":
-            case "IN":
-            case "NOT_IN":
-            case "BETWEEN":
-            case "LIKE":
-            case "IS NULL":
-            case "IS NOT NULL":
-
-                return true;
-            default:
-                return false;
-        }
+        if(sqlNode.getKind().belongsTo(SqlKind.COMPARISON)){return true;}          //比较符
+        if(sqlNode.getKind().belongsTo(SqlKind.BINARY_ARITHMETIC)){return true;}   //运算符
+        return false;
     }
 
     public static List<String> getParaOfFun(String fun) {  //取出函数的参数 后面会根据参数所属表设置语句的条件
@@ -238,6 +219,17 @@ public class SQLParserUtil {
             if ((c <= 'z' && c >= 'a') || (c <= 'Z' && c >= 'A')) {
                 sb.append(c);
             }
+        }
+        return sb.toString();
+    }
+
+    //中序遍历获取表达式字段
+    public static String LDR(SqlNode sqlNode) {
+        StringBuilder sb = new StringBuilder();
+        while (sqlNode != null) {
+            LDR(((SqlBasicCall) sqlNode).operands[0]);
+            sb.append(sqlNode.toString());
+            LDR(((SqlBasicCall) sqlNode).operands[1]);
         }
         return sb.toString();
     }
