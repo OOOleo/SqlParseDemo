@@ -31,17 +31,11 @@ public class SQLParserUtil {
 
         Map<String, String> selectMapAS = new HashMap<>(); //存储select选项别名
 
-
-
-
         SqlParser.Config config = SqlParser.configBuilder()
                 .setLex(Lex.MYSQL)
                 //.setConformance(SqlConformanceEnum.MYSQL_5)
                 .build();
 
-        //SqlParser sqlParser = SqlParser.create("select avg(logout_time - login_time)  from log_model where eduction='本科' and level=1 group by dept_id",config);
-        //SqlParser sqlParser = SqlParser.create("select * from log_model where eduction='本科' and level=1 group by dept_id",config);
-        //SqlParser sqlParser = SqlParser.create("select bb from log_model order by aa ",config);
         SqlParser sqlParser = SqlParser.create(sql, config);
 
         SqlNode sqlNode = null;
@@ -71,7 +65,6 @@ public class SQLParserUtil {
             sqlComposition.setGroupByColName(groupByList);
             SqlNode having = sqlSelect.getHaving();               //having条件
 
-
             /**
              * 获取from数据源   即表名
              */
@@ -93,7 +86,7 @@ public class SQLParserUtil {
                     select.add(s.toString());
                 }
                 if (isOperator(s)||s.getKind().belongsTo(SqlKind.FUNCTION)) {
-                    select.add(s.toString());
+                    select.add(processQuotesOfString(s.toString()));
                 }
             }
             sqlComposition.setSelect(select);
@@ -173,7 +166,7 @@ public class SQLParserUtil {
 
     public static void processWhere(SqlNode node, List<String> res) {    //输出where子树的叶子结点   即标识符
         if (node == null) return;
-        if (isOperator(node)) res.add(node.toString());
+        if (isOperator(node)) res.add(processQuotesOfString(node.toString()));
             //if(node.getKind().equals(SqlKind.IDENTIFIER) || node.getKind().equals(SqlKind.LITERAL)) return;
         else {
             SqlBasicCall sqlwhereBasicCall = (SqlBasicCall) node;
@@ -182,7 +175,6 @@ public class SQLParserUtil {
             }
         }
     }
-
 
     public static void printTree(List<String> list) {
         for (String s : list) {
@@ -193,6 +185,8 @@ public class SQLParserUtil {
     public static boolean isOperator(SqlNode sqlNode) {  //函数 操作符  数据 停止查询
         if(sqlNode.getKind().belongsTo(SqlKind.COMPARISON)){return true;}          //比较符
         if(sqlNode.getKind().belongsTo(SqlKind.BINARY_ARITHMETIC)){return true;}   //运算符
+        if (sqlNode.getKind().equals(SqlKind.LIKE)) {return true;}
+
         return false;
     }
 
@@ -224,12 +218,20 @@ public class SQLParserUtil {
     }
 
     //中序遍历获取表达式字段
-    public static String LDR(SqlNode sqlNode) {
+    public static void LDR(SqlNode sqlNode) {
         StringBuilder sb = new StringBuilder();
-        while (sqlNode != null) {
+        while (sqlNode.getKind().belongsTo(SqlKind.COMPARISON)) {
             LDR(((SqlBasicCall) sqlNode).operands[0]);
             sb.append(sqlNode.toString());
             LDR(((SqlBasicCall) sqlNode).operands[1]);
+        }
+    }
+    public static String processQuotesOfString(String str){  //处理'`'
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < str.length(); i++) {
+            if (str.charAt(i) != '`') {
+                sb.append(str.charAt(i));
+            }
         }
         return sb.toString();
     }
